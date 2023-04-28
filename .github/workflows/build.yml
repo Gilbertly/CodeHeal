@@ -1,0 +1,88 @@
+name: CodeHeal
+
+on:
+  pull_request:
+    types: [opened, synchronize]
+
+env:
+  PR_NUMBER: pr${{ github.event.pull_request.number }}
+
+concurrency:
+  group: ${{ github.head_ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        version: [18]
+    steps:
+      - uses: actions/checkout@v3
+      - name: Set up Node ${{ matrix.version }}
+        uses: actions/setup-node@v3
+        with:
+          node-version: ${{ matrix.version }}
+          registry-url: https://registry.npmjs.org
+
+      - name: Restore & cache dependencies
+        uses: actions/cache@v3
+        with:
+          path: ./node_modules
+          key: ${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+            ${{ runner.os }}-
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Run build
+        id: build
+        env:
+          BUILD_OUTPUT_FILE: build_output_${{ github.run_id }}.txt
+        run: |
+          set -o pipefail
+          npm run build 2>&1 | tee build_output_${{ github.run_id }}.txt
+          exit ${PIPESTATUS[0]}
+
+      # - name: Run CodeHeal action
+      #   if: failure()
+      #   uses: ./
+      #   with:
+      #     build-output-file: build_output_${{ github.run_id }}.txt
+      #     openai-key: ${{ secrets.OPENAI_API_KEY }}  # perms: fetch code fix suggestions
+      #     github-key: ${{ secrets.GITHUB_TOKEN }}    # perms: open pr with code fixes
+
+      - name: Run CodeHeal - Build-time Errors
+        if: failure()
+        run: npm run heal:buildtime
+
+      - name: Run CodeHeal - Run-time Errors
+        run: npm run heal:runtime
+
+      - name: Heal, Branch, Commit, Open PR
+        # if: failure()  # uncomment after testing
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          BUILD_OUTPUT_FILE: build_output_id${{ github.run_id }}.txt
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: |
+          npm run heal
+          # configure git
+          git config --global user.name "CodeHealBot"
+          git config --global user.email "action@github.com"
+          git config --global pull.rebase true
+
+          # branch-out & push
+          git checkout -B ${{ env.PR_BRANCH_NAME_FIX }}
+          git add --all
+          git diff-index --quiet HEAD || git commit -m "Fix (${{ env.PR_NUMBER }}): Resolved error(s) with CodeHealBot"
+          git push origin ${{ env.PR_BRANCH_NAME_FIX }}
+
+          # open PR to original branch
+          gh pr create --base ${{ env.PR_BRANCH_NAME }} --head ${{ env.PR_BRANCH_NAME_FIX }} --title "Fix: Resolving error found on ${{ env.PR_NUMBER }}" --body "It should build without errors now (I guess)"
+
+          # TODO:
+          # - If PR already created, sync pr branch with origin branch
+          # - Add PR fix reviewer as origin branch owner

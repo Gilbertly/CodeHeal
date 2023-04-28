@@ -1,0 +1,35 @@
+name: codeheal
+description: Github Action that suggests build error fixes.
+author: Gilbert Gathara
+
+inputs:
+  build-output-file:
+    required: false
+    description: Build output file with expected errors.
+    default: ''
+  github-key:
+    required: false
+    description: API key used to open PR & commit changes.
+    default: ''
+  openai-key:
+    required: false
+    description: API key used by OpenAI to suggest code fixes.
+    default: ''
+  upstash-url:
+    required: false
+    description: API URL used by Upstash to get/update rate limits.
+    default: ''
+  upstash-token:
+    required: false
+    description: API token used by Upstash to get/update rate limits.
+    default: ''
+
+runs:
+  using: node18
+  main: ts-node index.ts
+
+outputs:
+  files:
+    description: All files that had an error.
+  errors:
+    description: All build errors encountered.

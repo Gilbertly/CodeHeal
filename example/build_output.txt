@@ -1,0 +1,5 @@
+
+> codeheal@1.0.0 build
+> tsc
+
+example/index.ts(3,26): error TS7006: Parameter 'event' implicitly has an 'any' type.

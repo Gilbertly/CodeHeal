@@ -2,4 +2,4 @@
 > codeheal@1.0.0 build
 > tsc
 
-example/index.ts(3,26): error TS7006: Parameter 'event' implicitly has an 'any' type.
+example/error-build-time.ts(8,30): error TS1135: Argument expression expected.

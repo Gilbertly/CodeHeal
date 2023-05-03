@@ -1,9 +1,9 @@
-import fs from "fs";
-import { oneLine, } from 'common-tags';
+import * as fs from "fs";
+// import { oneLine, } from 'common-tags';
 import { ChatOpenAI } from 'langchain/chat_models';
 import { LLMChain } from 'langchain/chains';
 import { StructuredOutputParser } from 'langchain/output_parsers';
-import { PromptTemplate } from "langchain/prompts";
+import { PromptTemplate, ChatPromptTemplate, SystemMessagePromptTemplate, HumanMessagePromptTemplate } from "langchain/prompts";
 
 export const getFilename = async (buildOutput: any) => {
   const template = "You are a very senior developer with more than 10 years experience in Typescript." +
@@ -12,7 +12,7 @@ export const getFilename = async (buildOutput: any) => {
 
   const parser = StructuredOutputParser.fromNamesAndDescriptions({
     description: 'an explanation of what is recommended and what the error/issue was',
-    filename: "ONLY the filename of the file where the user input error comes from",
+    filename: "ONLY the filename(s) of the file where the user input error comes from",
   });
   const formatInstructions = parser.getFormatInstructions();
 
@@ -22,10 +22,11 @@ export const getFilename = async (buildOutput: any) => {
     partialVariables: { format_instructions: formatInstructions },
   })
 
-  const chat = new ChatOpenAI({ temperature: 0 });
+  const chat = new ChatOpenAI({ temperature: 0, openAIApiKey: process.env.OPENAI_API_KEY });
   const chain = new LLMChain({ llm: chat, prompt: prompt });
-  const filename = await chain.call({ buildOutput });
-  return parser.parse(filename.text);
+  const response = await chain.call({ buildOutput });
+  const filenames = response.text.split('\n');
+  return [...filenames];
 }
 
 export const suggestFix = async (buildOutput: any, errorFile: string) => {
@@ -47,15 +48,13 @@ export const suggestFix = async (buildOutput: any, errorFile: string) => {
     partialVariables: { format_instructions: formatInstructions },
   });
 
-  const chat = new ChatOpenAI({ temperature: 0 });
+  const chat = new ChatOpenAI({ temperature: 0, openAIApiKey: process.env.OPENAI_API_KEY });
   const chain = new LLMChain({ llm: chat, prompt: prompt });
   const codeFix = await chain.call({ codeContent, buildOutput });
   return parser.parse(codeFix.text);
 }
 
 export const suggestRuntimeFix = async (codeContent: string) => {
-  const chat = new ChatOpenAI({ temperature: 0, openAIApiKey: process.env.OPENAI_API_KEY });
-
   const parser = StructuredOutputParser.fromNamesAndDescriptions({
     description: 'an explanation of what is recommended and what the error/issue was',
     source: "ONLY the fixed code response to the user's input",
@@ -73,6 +72,7 @@ export const suggestRuntimeFix = async (codeContent: string) => {
     partialVariables: { format_instructions: formatInstructions },
   })
 
+  const chat = new ChatOpenAI({ temperature: 0, openAIApiKey: process.env.OPENAI_API_KEY });
   const chain = new LLMChain({ prompt: prompt, llm: chat });
   const res = await chain.call({ codeContent });
   return parser.parse(res.text);
